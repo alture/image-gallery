@@ -19,9 +19,12 @@ class ImageGalleryCollectionViewController: UICollectionViewController {
     var imageGallery: ImageGallery! {
         didSet {
             collectionView.reloadData()
-            delegate?.reloadImageGallery(imageGallery, at: currentIndex)
             title = imageGallery.title
         }
+    }
+    
+    private var flowLayout: UICollectionViewFlowLayout? {
+        return collectionView.collectionViewLayout as? UICollectionViewFlowLayout
     }
     
     var delegate: ImageGalleryCollectionViewControllerDelegate?
@@ -30,17 +33,19 @@ class ImageGalleryCollectionViewController: UICollectionViewController {
     private var animatedCell: [UICollectionViewCell] = []
     
     // MARK: Storyboard
+    
+    @IBOutlet weak var emptyImageGalleryView: UIView!
         
     @IBAction func deleteSelected() {
         if let selected = collectionView.indexPathsForSelectedItems {
             let items = selected.map { $0.item }.sorted().reversed()
-            for item in items {
-                imageGallery?.removeItem(at: item)
-            }
-            
             collectionView.performBatchUpdates({
+                for item in items {
+                    imageGallery?.removeItem(at: item)
+                }
                 collectionView.deleteItems(at: selected)
             }, completion: nil)
+            delegate?.reloadImageGallery(imageGallery, at: currentIndex)
         }
         
         navigationController?.isToolbarHidden = true
@@ -48,16 +53,40 @@ class ImageGalleryCollectionViewController: UICollectionViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        collectionView.backgroundView = emptyImageGalleryView
+        collectionView.backgroundView?.isHidden = true
         collectionView.dragDelegate = self
         collectionView.dropDelegate = self
+        self.collectionView.delegate = self
+        
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+        collectionView.addGestureRecognizer(pinch)
         
         configureItemSize()
         
-        navigationItem.leftBarButtonItem = editButtonItem
+        navigationItem.leftBarButtonItem = editButtonItem        
         navigationController?.isToolbarHidden = true
     }
     
+    @objc func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
+        switch recognizer.state {
+        case .ended:
+            let scale = recognizer.scale
+            print(scale)
+            configureItemSize(with: scale)
+        default:
+            break
+        }
+    }
+    
     override func numberOfSections(in collectionView: UICollectionView) -> Int {
+        if let imageGallery = imageGallery, imageGallery.images.isEmpty {
+            collectionView.backgroundView?.isHidden = false
+        } else {
+            collectionView.backgroundView?.isHidden = true
+        }
+        
         return 1
     }
 
@@ -92,7 +121,6 @@ class ImageGalleryCollectionViewController: UICollectionViewController {
         }
     }
     
-    
     override func collectionView(_ collectionView: UICollectionView, didDeselectItemAt indexPath: IndexPath) {
         if let selected = collectionView.indexPathsForSelectedItems, selected.count == 0 {
             navigationController?.isToolbarHidden = true
@@ -121,17 +149,20 @@ class ImageGalleryCollectionViewController: UICollectionViewController {
         }
     }
     
-    private func configureItemSize() {
-        let width = (view.frame.size.width - 60) / 3
-        let layout = collectionView.collectionViewLayout as! UICollectionViewFlowLayout
-        layout.itemSize = CGSize(width: width, height: width)
-    }
 }
 
 // MARK: - UICollectionViewDelegateFlowLayout
 
 extension ImageGalleryCollectionViewController: UICollectionViewDelegateFlowLayout {
-
+    private func configureItemSize(with scale: CGFloat = 1.0) {
+        let width = (view.frame.size.width - 60) / (3.0 * scale)
+        flowLayout?.itemSize = CGSize(width: width, height: width)
+        flowLayout?.invalidateLayout()
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
+        return flowLayout?.itemSize ?? CGSize(width: 300, height: 300)
+    }
 }
 
 // MARK: - UICollectionViewDragDelegate
@@ -162,6 +193,7 @@ extension ImageGalleryCollectionViewController: UICollectionViewDragDelegate {
 // MARK: - UICollectionViewDropDelegate
 
 extension ImageGalleryCollectionViewController: UICollectionViewDropDelegate {
+    
     func collectionView(_ collectionView: UICollectionView, canHandle session: UIDropSession) -> Bool {
         if (session.localDragSession?.localContext as? UICollectionView) == collectionView {
             return session.canLoadObjects(ofClass: NSURL.self) || session.canLoadObjects(ofClass: UIImage.self)
@@ -183,6 +215,7 @@ extension ImageGalleryCollectionViewController: UICollectionViewDropDelegate {
                     if item.dragItem.localObject is NSURL {
                         collectionView.performBatchUpdates({
                             imageGallery.moveItem(at: sourceIndexPath.item, to: destinationIndexPath.item)
+                            delegate?.reloadImageGallery(imageGallery, at: currentIndex)
                             collectionView.deleteItems(at: [sourceIndexPath])
                             collectionView.insertItems(at: [destinationIndexPath])
                         }, completion: nil)
@@ -197,6 +230,8 @@ extension ImageGalleryCollectionViewController: UICollectionViewDropDelegate {
                             if let url = (provider as? URL)?.imageURL {
                                 placeholderContext.commitInsertion(dataSourceUpdates: { insertionIndexPath in
                                     self.imageGallery.addItem(at: insertionIndexPath.item, with: url)
+                                    self.delegate?.reloadImageGallery(
+                                       self.imageGallery, at: self.currentIndex)
                                 })
                             } else {
                                 placeholderContext.deletePlaceholder()

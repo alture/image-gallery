@@ -67,10 +67,8 @@ class ImageGalleryTableViewController: UITableViewController {
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        
-        let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath)
-        
         if indexPath.section == 0 {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath)
             if let customCell = cell as? TextFieldTableViewCell {
                 let tap = UITapGestureRecognizer(target: self, action: #selector(tapHandler(_:)))
                 tap.numberOfTapsRequired = 2
@@ -84,14 +82,14 @@ class ImageGalleryTableViewController: UITableViewController {
                         tableView.reloadSections(IndexSet(integer: 0), with: .automatic)
                     }
                 }
-                
-                return customCell
             }
+            return cell
         } else {
-            cell.textLabel?.text = imageGalleryDocuments.getTitleOfDocumentAtIndexPath(indexPath)
+            let cell = tableView.dequeueReusableCell(withIdentifier: "RemovedCell", for: indexPath)
+            let label = cell.viewWithTag(1000) as! UILabel
+            label.text = imageGalleryDocuments.getTitleOfDocumentAtIndexPath(indexPath)
+            return cell
         }
-        
-        return cell
     }
     
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
@@ -111,6 +109,8 @@ class ImageGalleryTableViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
         let deleteAction = UIContextualAction(style: .destructive, title: "Delete") { (action, view, completionHandler) in
             self.imageGalleryDocuments.removeImageGalleyAtIndexPath(indexPath)
+            let firstIndex = IndexPath(row: self.imageGalleryDocuments.count - 1, section: 0)
+            self.updateImageCVC(at: firstIndex)
             tableView.reloadData()
             completionHandler(true)
         }
@@ -147,18 +147,17 @@ class ImageGalleryTableViewController: UITableViewController {
             updateImageCVC(at: indexPath)
         }
     }
+    
+    override func shouldPerformSegue(withIdentifier identifier: String, sender: Any?) -> Bool {
+        return identifier == "ShowImage"
+    }
 
     // MARK: - Navigation
 
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if segue.identifier == "ShowImages" {
             if let indexPath = sender as? IndexPath {
-                var destination = segue.destination
-                if let navCon = destination as? UINavigationController {
-                    destination = navCon.visibleViewController ?? navCon
-                }
-                
-                if let galleryCVC = destination as? ImageGalleryCollectionViewController {
+                if let galleryCVC = segue.destination.contents as? ImageGalleryCollectionViewController {
                     galleryCVC.imageGallery = imageGalleryDocuments.imageGalleryAtIndexPath(indexPath)
                     galleryCVC.delegate = self
                     galleryCVC.currentIndex = indexPath.row
@@ -166,7 +165,7 @@ class ImageGalleryTableViewController: UITableViewController {
             }
         }
     }
-    
+
 }
 
 extension ImageGalleryTableViewController: ImageGalleryCollectionViewControllerDelegate {
